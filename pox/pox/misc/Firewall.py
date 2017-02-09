@@ -55,8 +55,9 @@ class Firewall (object):
     self.mac_to_port = {}
     log.debug("MAC table setup")
 
-    self.file = open('pox/misc/firewallMini.csv', 'rb')
+    self.file = open('pox/misc/firewall.csv', 'rb')
     self.reader = csv.reader(self.file, delimiter=',')
+    # this is an array of the edge switches macs so I can only install rules on those
     self.edgeSwitches = ['00-00-00-00-00-04','00-00-00-00-00-05','00-00-00-00-00-06', '00-00-00-00-00-07']
     self.firewall = self.readFirewall()
 
@@ -67,12 +68,12 @@ class Firewall (object):
     firewall = []
     for row in self.iterRows:
         firewall.append(row[0:])
+        print row
     return firewall 
 
 # Handle incoming packets
   def _handle_PacketIn(self, event):
         packet = event.parsed
-
         if not packet.parsed:
             log.warning("Ignoring incomplete packet")
             return
@@ -82,11 +83,9 @@ class Firewall (object):
         dst_port = self.mac_to_port.get((event.connection, packet.dst))
 
         if dst_port is None:
-            # We don't know where the destination is yet.  So, we'll just
-            # send the packet out all ports (except the one it came in on!)
-            # and hope the destination is out there somewhere. :)
+            # Don't know where the destination is yet so send the packet out all ports (except the one it came in on!)
             msg = of.ofp_packet_out(data=event.ofp)
-            msg.actions.append(of.ofp_action_output(port=of.OFPP_ALL))
+            msg.actions.append(of.ofp_action_output(port=of.OFPP_FLOOD))
             event.connection.send(msg)
         else:
             # Since we know the switch ports for both the source and dest
@@ -125,32 +124,46 @@ class Firewall (object):
         connection = event.connection
         dpid = connection.dpid
         log.info("Switch %s has come up.",dpid_to_str(dpid))
+        # check if the present switch is an edge switch
         result = self.checkSwitchType(dpid_to_str(dpid))
         if result:
             for rule in self.firewall:
-                if rule[0] == 'ip':
-                    msg = of.ofp_flow_mod()
-                    msg.match.dl_type = 0x800
-                    ipSrc = rule[1]
-                    ipDst = rule[2]
-                    msg.match.nw_src = IPAddr(ipSrc)
-                    msg.match.nw_dst = IPAddr(ipDst)
-                    msg.in_port = rule[3]
-                    event.connection.send(msg)
-                    log.debug("Installing %s <-> %s , port: %s" % (ipSrc, ipDst, rule[3]))
-                elif rule[0] == 'mac':
-                    macSrc = rule[1]
-                    macDst = rule[2]
+                if rule[0] == 'mac':
+                    macSrc = rule[1] #get mac src
+                    macDst = rule[2] # get mac dest
                     msg = of.ofp_flow_mod()
                     msg.match.dl_src = EthAddr(macSrc)
                     msg.match.dl_dst = EthAddr(macDst)
-                    log.debug("Installing %s <-> %s" % (macSrc, macDst))
+                    log.debug("Installing %s  Eth rule <-> %s" % (macSrc, macDst))
                     event.connection.send(msg)
                     msg = of.ofp_flow_mod()
                     msg.match.dl_src = EthAddr(macDst)
                     msg.match.dl_dst = EthAddr(macSrc)
                     event.connection.send(msg)
-                    log.debug("Installing %s <-> %s" % (macDst, macSrc))
+                    log.debug("Installing %s Eth rule <-> %s" % (macDst, macSrc))
+
+                if rule[0] == 'ip':
+                    msg = of.ofp_flow_mod()
+                    msg.match.dl_type = 0x800
+                    ipSrc = rule[1] # get ip src
+                    ipDst = rule[2] #get ip dest
+                    msg.match.nw_src = IPAddr(ipSrc)
+                    msg.match.nw_dst = IPAddr(ipDst)
+                    if(rule[3] == '80'):
+                        log.info('setting out_port')
+                        msg.out_port = int(rule[3])
+                    event.connection.send(msg)
+                    log.debug("Installing IP rule %s  <-> %s" % (ipSrc, ipDst))
+
+                    msg = of.ofp_flow_mod()
+                    msg.match.dl_type = 0x800
+                    msg.match.nw_src = IPAddr(ipDst)
+                    msg.match.nw_dst = IPAddr(ipSrc)
+                    if(rule[3] == '80'):
+                        log.info('setting out_port')
+                        msg.out_port = int(rule[3])
+                    event.connection.send(msg)
+                    log.debug("Installing IP rule%s <-> %s" % (ipDst, ipSrc))
         log.debug("firewall updated")
 
 def launch ():
