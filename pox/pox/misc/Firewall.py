@@ -1,21 +1,4 @@
-
-# Copyright 2012 James McCauley
-#
-# This file is part of POX.
-#
-# POX is free software: you can redistribute it and/or modify
-# it under the terms of the GNU General Public License as published by
-# the Free Software Foundation, either version 3 of the License, or
-# (at your option) any later version.
-#
-# POX is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# GNU General Public License for more details.
-#
-# You should have received a copy of the GNU General Public License
-# along with POX.  If not, see <http://www.gnu.org/licenses/>.
-
+# Colum Foskin - 20062042 - Cloud Infrastructure - Assignment 1
 """
 This component is for use with the OpenFlow tutorial.
 
@@ -147,11 +130,15 @@ class Firewall (object):
                     msg.match.dl_type = 0x800
                     ipSrc = rule[1] # get ip src
                     ipDst = rule[2] #get ip dest
-                    msg.match.nw_src = IPAddr(ipSrc)
+                    if (msg.match.nw_src == IPAddr(ipSrc)):
+                        print 'true'
                     msg.match.nw_dst = IPAddr(ipDst)
+                    
+                    # block destination port 80 - could also be * for ip rule 
+                    # so needed if statement to not break things!
                     if(rule[3] == '80'):
-                        log.info('setting out_port')
-                        msg.out_port = int(rule[3])
+                        log.info('setting dest port')
+                        msg.tp_dst = int(rule[3])
                     event.connection.send(msg)
                     log.debug("Installing IP rule %s  <-> %s" % (ipSrc, ipDst))
 
@@ -159,9 +146,11 @@ class Firewall (object):
                     msg.match.dl_type = 0x800
                     msg.match.nw_src = IPAddr(ipDst)
                     msg.match.nw_dst = IPAddr(ipSrc)
+                    # block destination port 80 - could also be * for ip rule 
+                    # so needed if statement to not break things!
                     if(rule[3] == '80'):
-                        log.info('setting out_port')
-                        msg.out_port = int(rule[3])
+                        log.info('setting dest port')
+                        msg.tp_dst = int(rule[3])
                     event.connection.send(msg)
                     log.debug("Installing IP rule%s <-> %s" % (ipDst, ipSrc))
         log.debug("firewall updated")
